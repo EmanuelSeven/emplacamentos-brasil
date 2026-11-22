@@ -109,6 +109,23 @@ tests/                 testes com dados inventados
   - O total (7389) fica na silver como categoria `total`, e nunca deve ser somado junto com as
     outras quatro categorias.
 
+- **Gold (Etapa 4):** uma VIEW por indicador, cada uma no seu `.sql`, lendo só da silver.
+  - `vw_tendencia`: por mês e categoria (as 5), quantidade, acumulado dos últimos 12 meses
+    (NULL enquanto não houver 12 meses) e variação % do acumulado contra 12 meses antes.
+  - `vw_mix`: por ano e categoria (só as 4, sem o `total`), quantidade no ano e participação %
+    no total do ano (JOIN com a linha `total`), mais a coluna `meses_no_ano`, porque 1990 e o
+    último ano estão incompletos.
+  - `vw_sazonalidade`: por categoria (as 5) e mês do ano (1 a 12), índice médio de
+    quantidade ÷ média mensal do próprio ano × 100, só com **anos completos** (12 meses).
+  - `vw_juros_emplacamentos`: JOIN silver_selic × silver_emplacamentos (categoria `total`) com
+    defasagem de 0 a 12 meses: Selic do mês X (`selic_ano`) contra emplacamentos do mês X+N.
+    Correlação de Pearson sobre os **níveis** (valores do mês, não variações), calculada em SQL,
+    mais o número de meses usados.
+    **Recorte: a partir de 2000-01** (depois do câmbio flutuante e do regime de metas de inflação
+    de 1999; antes disso a Selic passa de 80% ao mês e distorce a relação).
+    Limitação a declarar no README: correlação não é causalidade e a série tem tendência e
+    sazonalidade.
+
 ## README (obrigatório pelo curso)
 
 Deve conter: fonte (link + licença), o que é uma linha de cada tabela, as três camadas e os indicadores,
