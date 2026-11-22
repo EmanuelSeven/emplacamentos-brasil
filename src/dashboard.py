@@ -1,15 +1,18 @@
 """Dashboard (opcional) dos emplacamentos, em Streamlit.
 
-Como rodar (a partir da raiz do projeto, depois de python src/main.py):
+Como rodar (a partir da raiz do projeto):
     streamlit run src/dashboard.py
 
 Regra do curso: o dashboard lê SÓ as VIEWs da gold (via queries.py), sem
 nenhum cálculo de indicador na tela. Aqui os dados só são colocados em
 tabela (pandas), formatados/renomeados para exibição e desenhados.
-O dashboard não chama a API: se o banco não existir, ele pede para rodar
-o painel do terminal antes.
+Se o banco ou as VIEWs não existirem (ex.: no Streamlit Community Cloud,
+onde data/ não vai para o git), o dashboard roda o pipeline uma vez,
+reaproveitando os main() de ingestao.py e transformacao.py.
 """
 
+import contextlib
+import io
 import json
 import os
 import threading
@@ -18,9 +21,12 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+import ingestao
 import queries
+import transformacao
 from database import CAMINHO_BANCO, PASTA_DATA, PASTA_SQL, conectar
 from main import formatar, views_faltando
+from visitas import registrar_visita
 
 # Nomes das categorias para exibição (só troca o texto, não mexe nos números).
 ROTULOS = {
@@ -158,18 +164,81 @@ def ler_visualizacoes():
 
 
 def registrar_visualizacao():
-    """Soma 1 ao total do arquivo. Se o arquivo estiver ilegível, não grava
-    nada (para não zerar um total que existia)."""
+    """Contador LOCAL: soma 1 ao total do arquivo e devolve o novo total.
+    Se o arquivo estiver ilegível, não grava nada (para não zerar um total
+    que existia) e devolve None."""
     with trava_do_contador():
         total = ler_visualizacoes()
         if total is None:
-            return
+            return None
         os.makedirs(PASTA_DATA, exist_ok=True)
         caminho = caminho_visualizacoes()
         temporario = caminho + ".tmp"
         with open(temporario, "w", encoding="utf-8") as arquivo:
             json.dump({"visualizacoes": total + 1}, arquivo)
         os.replace(temporario, caminho)  # troca de uma vez: o arquivo nunca fica pela metade
+        return total + 1
+
+
+def segredos_supabase():
+    """(url, chave) dos secrets do Streamlit, ou None se não estiverem configurados."""
+    try:
+        return st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"]
+    except Exception:  # sem secrets.toml, ou sem as duas chaves
+        return None
+
+
+def contar_acesso():
+    """Registra um acesso e devolve o total (ou None). Nunca levanta exceção.
+
+    Com secrets (nuvem): contador no Supabase, que sobrevive aos reinícios.
+    Sem secrets (local): contador em data/visualizacoes.json.
+    """
+    try:
+        segredos = segredos_supabase()
+        if segredos is not None:
+            return registrar_visita(*segredos)
+        return registrar_visualizacao()
+    except Exception:
+        return None
+
+
+class FalhaNoPipeline(Exception):
+    """O pipeline não conseguiu montar o banco; a mensagem traz o que ele imprimiu."""
+
+
+@st.cache_resource(show_spinner=False)
+def montar_pipeline():
+    """Roda o pipeline completo (API -> bronze -> silver -> gold) uma vez por servidor.
+
+    Usado quando o banco não existe, como no Streamlit Community Cloud (data/ não vai
+    para o git). Reaproveita os main() dos scripts, que imprimem o progresso e, em
+    caso de erro, imprimem a mensagem e chamam sys.exit(1): a saída é capturada para
+    ser mostrada na tela. Em caso de falha a função levanta exceção, e o
+    st.cache_resource não guarda exceções: a próxima abertura tenta de novo.
+    """
+    saida = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(saida):
+            ingestao.main()
+            transformacao.main()
+    except SystemExit as erro:
+        if erro.code not in (None, 0):
+            raise FalhaNoPipeline(saida.getvalue()) from None
+    except Exception as erro:
+        raise FalhaNoPipeline(f"{saida.getvalue()}\n{type(erro).__name__}: {erro}") from erro
+    return saida.getvalue()
+
+
+def faltam_dados():
+    """True se o banco não existe ou se falta alguma VIEW da gold."""
+    if not os.path.exists(CAMINHO_BANCO):
+        return True
+    conexao = conectar()
+    try:
+        return bool(views_faltando(conexao))
+    finally:
+        conexao.close()
 
 
 def arquivo_sql_da_view(view):
@@ -184,29 +253,33 @@ def arquivo_sql_da_view(view):
 st.set_page_config(page_title="Emplacamentos Brasil", page_icon=":material/directions_car:", layout="wide")
 st.title("EMPLACAMENTOS NO BRASIL: PAINEL DE MERCADO")
 
-# --- Contador: uma visualização por sessão -------------------------------------
+# --- Contador: um acesso por sessão --------------------------------------------
 # O session_state vive enquanto a aba do navegador estiver aberta; cliques e
 # trocas de categoria rodam o script de novo, mas não contam outra vez.
-if "visualizacao_registrada" not in st.session_state:
-    registrar_visualizacao()
-    st.session_state["visualizacao_registrada"] = True
+# O total devolvido na abertura fica guardado e é o que aparece na tela.
+if "total_acessos" not in st.session_state:
+    st.session_state["total_acessos"] = contar_acesso()
 
-# --- Banco e VIEWs precisam existir (o dashboard não monta o pipeline) ---------
-if not os.path.exists(CAMINHO_BANCO):
-    st.warning(
-        "O banco de dados ainda não existe. Rode antes, a partir da raiz do projeto: "
-        "`python src/main.py`",
-        title="Dados não encontrados",
-    )
-    st.stop()
+# --- Sem banco ou sem VIEWs: monta o pipeline uma vez (ex.: Community Cloud) ---
+if faltam_dados():
+    with st.spinner("Buscando os dados no Banco Central (primeira execução)..."):
+        try:
+            montar_pipeline()
+        except FalhaNoPipeline as erro:
+            st.error(
+                f"Não foi possível montar o banco de dados.\n\n```\n{erro}\n```",
+                title="Falha ao buscar os dados",
+            )
+            st.stop()
 
 conexao = conectar()
 try:
     faltando = views_faltando(conexao)
     if faltando:
-        st.warning(
-            f"Faltam as VIEWs da gold: {', '.join(faltando)}. Rode antes, a partir da "
-            "raiz do projeto: `python src/main.py`",
+        # O pipeline já rodou neste servidor (cache), mas as VIEWs sumiram depois.
+        st.error(
+            f"Faltam as VIEWs da gold: {', '.join(faltando)}. Reinicie o app ou rode, "
+            "a partir da raiz do projeto: `python src/main.py`",
             title="Indicadores não encontrados",
         )
         st.stop()
@@ -230,8 +303,8 @@ if carregado_em:
     atualizacao_br = f"{carregado_em[8:10]}/{carregado_em[5:7]}/{carregado_em[:4]} {carregado_em[11:16]}"
 else:
     atualizacao_br = "-"
-total_acessos = ler_visualizacoes()
-acessos_br = "-" if total_acessos is None else formatar(total_acessos, "acessos")
+total_acessos = st.session_state["total_acessos"]
+acessos_br = "–" if total_acessos is None else formatar(total_acessos, "acessos")
 
 st.caption(
     f"Dados: Banco Central (Fenabrave) · última atualização {atualizacao_br} (Brasília) · "

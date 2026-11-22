@@ -22,10 +22,12 @@ CARGA_PADRAO = "2030-06-15 10:00:00"
 
 @pytest.fixture(autouse=True)
 def sem_internet(monkeypatch):
-    """Garante que nenhum teste chama a API: requests.get falha se for usado."""
+    """Garante que nenhum teste acessa a internet: requests.get (API do Banco
+    Central) e requests.post (contador no Supabase) falham se forem usados."""
     def bloqueado(*args, **kwargs):
         raise RuntimeError("Teste tentou acessar a internet")
     monkeypatch.setattr(requests, "get", bloqueado)
+    monkeypatch.setattr(requests, "post", bloqueado)
 
 
 @pytest.fixture
