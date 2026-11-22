@@ -1,5 +1,7 @@
 """Testes da ingestão (sem internet) e da formatação do painel."""
 
+from datetime import datetime, timezone
+
 import pytest
 
 import ingestao
@@ -17,6 +19,26 @@ class RespostaFalsa:
 
     def json(self):
         return self._dados
+
+
+def test_carregado_em_no_horario_de_brasilia_mesmo_com_servidor_em_utc(monkeypatch):
+    # Relógio falso fixo em 01/12/2026 01:30 UTC, como num servidor em UTC
+    # (Streamlit Cloud). Sem fuso, now() devolve a hora "da máquina" (UTC);
+    # com fuso, converte o mesmo instante para ele.
+    # À mão: Brasília é UTC-3 (sem horário de verão desde 2019), então o mesmo
+    # instante em Brasília é 30/11/2026 22:30. Caso de borda de propósito:
+    # em UTC já seria dezembro, e o corte da Selic manteria novembro (incompleto).
+    instante = datetime(2026, 12, 1, 1, 30, 0, tzinfo=timezone.utc)
+
+    class RelogioDeServidorEmUTC(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            if tz is None:
+                return instante.replace(tzinfo=None)  # hora local do servidor (UTC)
+            return instante.astimezone(tz)
+
+    monkeypatch.setattr(ingestao, "datetime", RelogioDeServidorEmUTC)
+    assert ingestao.gerar_carregado_em() == "2026-11-30 22:30:00"
 
 
 def test_baixar_serie_falha_com_lista_vazia(monkeypatch):

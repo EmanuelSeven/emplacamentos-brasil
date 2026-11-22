@@ -126,6 +126,7 @@ pelo autor, é a "última atualização" do dashboard, que lê o `carregado_em` 
 | Correlação sobre os **níveis** | Escolha do autor. **Limitação:** correlação não é causalidade, e as duas séries têm tendência e sazonalidade |
 | Dashboard monta o pipeline se o banco não existir | Na nuvem não há banco local: data/ não vai para o git |
 | Contador de acessos no Supabase | O disco do Streamlit Cloud é apagado a cada reinício; RLS ligado e a função só soma 1 |
+| carregado_em sempre no horário de Brasília | O servidor da nuvem roda em UTC |
 
 ### Principais resultados (dados até out/2026)
 - **Mercado aquecido:** 3.039.871 veículos em 12 meses, **+13,34%** sobre os 12 meses anteriores.
@@ -298,6 +299,7 @@ conferido, quase sempre **contando linhas antes e depois** ou comparando com um 
 | 6b (Claude Code) | Exibiu "1 acessos", porque seguiu o formato pedido **ao pé da letra** | Leitura da resposta |
 | 6b (Claude chat → Claude Code) | O planejamento afirmou que "colunas calculadas de VIEW não têm tipo". Errado em parte: colunas vindas de um `CAST` (como `ano` e `mes_do_ano`) herdam o tipo | O Claude Code conferiu o resultado do `PRAGMA table_info` e corrigiu a legenda |
 | Conferência (Claude) | Na revisão do painel, o gabarito foi digitado como "dezembro 113,33", quando o cálculo dava 113,3 (o painel mostrava o certo: 113,26) | Comparando o gabarito com a saída |
+| Deploy | O carregado_em usava o horário do servidor; no Streamlit Cloud (UTC) a última atualização aparecia 3 h adiantada, e o corte do mês incompleto da Selic erraria no último dia do mês após as 21h | Olhando o app publicado |
 
 Os indicadores da gold foram **calculados duas vezes de forma independente** (VIEWs em SQL e um script
 separado em Python) e bateram até a 4ª casa decimal.

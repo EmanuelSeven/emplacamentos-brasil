@@ -11,6 +11,7 @@ Se qualquer série falhar, a carga para e o erro é mostrado.
 import os
 import sys
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -19,6 +20,9 @@ from database import PASTA_SQL, conectar
 URL_SGS = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados?formato=json"
 TIMEOUT_SEGUNDOS = 30
 
+# Fuso de Brasília. No Windows, o zoneinfo precisa do pacote tzdata (requirements.txt).
+FUSO_BRASILIA = ZoneInfo("America/Sao_Paulo")
+
 # Códigos aprovados no CLAUDE.md. Tabela da bronze -> lista de códigos.
 SERIES = {
     "bronze_emplacamentos": [7384, 7385, 7386, 7387, 7389],
@@ -26,6 +30,18 @@ SERIES = {
 }
 
 SCRIPT_BRONZE = os.path.join(PASTA_SQL, "bronze", "01_criar_bronze.sql")
+
+
+def gerar_carregado_em():
+    """Data/hora da carga, SEMPRE no horário de Brasília: 'AAAA-MM-DD HH:MM:SS'.
+
+    Motivo: datetime.now() sem fuso usa o relógio do servidor. No Streamlit
+    Cloud ele roda em UTC, 3 h à frente de Brasília: a "última atualização"
+    aparecia adiantada e, no último dia do mês depois das 21h, o carregado_em
+    já cairia no mês seguinte, e a silver_selic manteria o mês em andamento
+    (que é incompleto). Com o fuso explícito, o resultado não depende da máquina.
+    """
+    return datetime.now(FUSO_BRASILIA).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def baixar_serie(codigo):
@@ -94,7 +110,7 @@ def main():
             print(f"  {len(baixadas[(tabela, codigo)])} registros recebidos")
 
     # 2) Recria a bronze e grava tudo numa única transação.
-    carregado_em = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    carregado_em = gerar_carregado_em()
     conexao = conectar()
     try:
         criar_bronze(conexao)
