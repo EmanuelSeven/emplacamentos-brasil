@@ -124,6 +124,8 @@ pelo autor, é a "última atualização" do dashboard, que lê o `carregado_em` 
 | Sazonalidade só com **anos completos** | 1990 começa em fevereiro e 2026 está incompleto |
 | Juros × emplacamentos **a partir de 2000-01** | Antes do câmbio flutuante e do regime de metas (1999), a Selic passa de 80% ao mês e distorce a relação |
 | Correlação sobre os **níveis** | Escolha do autor. **Limitação:** correlação não é causalidade, e as duas séries têm tendência e sazonalidade |
+| Dashboard monta o pipeline se o banco não existir | Na nuvem não há banco local: data/ não vai para o git |
+| Contador de acessos no Supabase | O disco do Streamlit Cloud é apagado a cada reinício; RLS ligado e a função só soma 1 |
 
 ### Principais resultados (dados até out/2026)
 - **Mercado aquecido:** 3.039.871 veículos em 12 meses, **+13,34%** sobre os 12 meses anteriores.
@@ -166,6 +168,49 @@ streamlit run src/dashboard.py
 
 Para atualizar os dados depois, use a opção **1** do painel ou rode
 `python src/ingestao.py` e `python src/transformacao.py`.
+
+### Contador de acessos do dashboard (opcional)
+O dashboard conta uma abertura por sessão. **Sem configurar nada, ele conta localmente**, no arquivo
+`data/visualizacoes.json`. Na nuvem (Streamlit Community Cloud) o disco é apagado a cada reinício, então o
+total fica numa tabela do **Supabase**. Para ligar:
+
+1. No Supabase, abra o **SQL Editor** e rode o SQL abaixo (uma vez).
+2. Copie `.streamlit/secrets.toml.exemplo` para `.streamlit/secrets.toml` e preencha com a URL do projeto
+   e a **publishable key** (`sb_publishable_...`). Esse arquivo está no `.gitignore` e **nunca** vai para
+   o git. No Streamlit Community Cloud, cole o mesmo conteúdo em *Settings → Secrets*.
+
+```sql
+-- Uma única linha com o total de acessos.
+create table if not exists public.page_views_emplacamentos (
+    id    smallint primary key default 1 check (id = 1),
+    total bigint   not null default 0 check (total >= 0)
+);
+insert into public.page_views_emplacamentos (id, total) values (1, 0)
+on conflict (id) do nothing;
+
+-- RLS ligado e nenhuma policy: ninguém lê nem altera a tabela direto pela API.
+alter table public.page_views_emplacamentos enable row level security;
+revoke all on table public.page_views_emplacamentos from anon, authenticated;
+
+-- A única porta de entrada: uma função que só soma 1 e devolve o novo total.
+-- security definer: roda com o dono da função (por isso passa pelo RLS);
+-- search_path vazio + nomes completos (public.) evitam que outro schema a desvie.
+create or replace function public.increment_page_views_emplacamentos()
+returns bigint
+language sql
+security definer
+set search_path = ''
+as $$
+    update public.page_views_emplacamentos
+       set total = total + 1
+     where id = 1
+    returning total;
+$$;
+
+-- Só o papel anon (o da publishable key) pode executar a função.
+revoke all on function public.increment_page_views_emplacamentos() from public, anon, authenticated;
+grant execute on function public.increment_page_views_emplacamentos() to anon;
+```
 
 ### Como sabemos que os testes testam algo
 São 11 testes com **dados inventados** num banco em memória, executando os `.sql` reais do projeto, e um
@@ -263,7 +308,6 @@ separado em Python) e bateram até a 4ª casa decimal.
 - **Ranking por modelo:** pipeline próprio sobre os dados da Fenabrave (exige resolver a licença e extrair dados de PDF).
 - **Câmbio e matéria-prima importada:** cruzar emplacamentos com o dólar (PTAX) e com as importações de PVB (Comex Stat).
 - **Frota por região:** RENAVAM (domínio público) cruzado com a população do IBGE.
-- **Publicar o dashboard** (Streamlit Community Cloud) com um contador de acessos persistente.
 
 ---
 
