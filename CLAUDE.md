@@ -5,9 +5,10 @@ Pipeline local, do dado bruto aos indicadores, sobre os **emplacamentos de veíc
 
 ## Contexto de negócio
 
-O autor trabalha numa indústria de vidros automotivos (laminados e temperados).
-Os emplacamentos funcionam como termômetro da demanda das montadoras e apoiam o planejamento de
-vendas, produção e compras. **Nenhum dado interno da empresa entra neste repositório**: ele é público.
+Para a cadeia automotiva (montadoras, autopeças e fornecedores), os emplacamentos funcionam como
+termômetro da demanda e apoiam o planejamento de vendas, produção e compras.
+**Este repositório é público: usa somente dados públicos e não menciona o empregador nem o setor
+específico do autor.**
 
 ## Escopo (fechado, não ampliar sem pedir)
 
