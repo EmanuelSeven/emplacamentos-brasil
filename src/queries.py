@@ -96,3 +96,72 @@ def juros_emplacamentos(conexao):
         ORDER BY defasagem_meses
         """
     ).fetchall()
+
+
+# --- Consultas usadas só pelo dashboard (src/dashboard.py) ---------------------
+# Mesmo padrão: só SELECT, WHERE, ORDER BY e LIMIT sobre as VIEWs da gold.
+# Mix, sazonalidade e juros reaproveitam as funções acima.
+
+
+def ultimo_mes_total(conexao):
+    """Dashboard (topo): a linha do mês mais recente da categoria total."""
+    return conexao.execute(
+        """
+        SELECT mes, quantidade, acumulado_12m, variacao_12m_pct
+        FROM vw_tendencia
+        WHERE categoria = 'total'
+        ORDER BY mes DESC
+        LIMIT 1
+        """
+    ).fetchone()
+
+
+def serie_acumulado_12m(conexao, categoria):
+    """Dashboard (gráfico 1): acumulado de 12 meses de uma categoria, mês a mês.
+
+    Os primeiros 11 meses da série (acumulado NULL) ficam de fora com WHERE.
+    """
+    return conexao.execute(
+        """
+        SELECT mes, categoria, acumulado_12m, variacao_12m_pct
+        FROM vw_tendencia
+        WHERE categoria = ?
+          AND acumulado_12m IS NOT NULL
+        ORDER BY mes
+        """,
+        (categoria,),
+    ).fetchall()
+
+
+def ultima_carga(conexao):
+    """Dashboard (linha abaixo do título): data/hora da última carga da API.
+
+    EXCEÇÃO à regra "só VIEWs da gold", pedida pelo autor: carregado_em só
+    existe na bronze, e é um metadado da carga, não um indicador. Só leitura,
+    sem cálculo; devolve o texto como foi gravado ('AAAA-MM-DD HH:MM:SS').
+    """
+    linha = conexao.execute(
+        """
+        SELECT carregado_em
+        FROM bronze_emplacamentos
+        ORDER BY carregado_em DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    return None if linha is None else linha["carregado_em"]
+
+
+def colunas_da_view(conexao, view):
+    """Dashboard (aba Arquitetura): colunas de uma VIEW, via PRAGMA table_info.
+
+    pragma_table_info(?) é a forma de PRAGMA table_info que aceita o nome
+    como parâmetro, em vez de colar o nome na string do SQL.
+    """
+    return conexao.execute(
+        """
+        SELECT cid, name, type
+        FROM pragma_table_info(?)
+        ORDER BY cid
+        """,
+        (view,),
+    ).fetchall()
