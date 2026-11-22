@@ -13,9 +13,13 @@ vendas, produção e compras. **Nenhum dado interno da empresa entra neste repos
 
 - **Fonte:** API pública do Banco Central (SGS). Licença ODbL, citar a fonte no README.
   - URL: `https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados?formato=json`
-  - Emplacamentos (fonte original Fenabrave): 7384 (automóveis), 7389 (total).
-    Os códigos de comerciais leves, caminhões e ônibus **devem ser confirmados no portal antes de usar**.
-  - Selic mensal: confirmar o código no portal antes de usar (candidato: 4390, Selic acumulada no mês).
+  - Emplacamentos (fonte original Fenabrave, unidade: veículos, mensal, desde 02/1990 — os metadados dizem 01/1990, mas a API começa em 02/1990) — códigos
+    confirmados no portal dadosabertos.bcb.gov.br em 22/11/2026:
+    7384 automóveis, 7385 comerciais leves, 7386 caminhões, 7387 ônibus, 7389 total.
+  - Selic: 4390 (Selic acumulada no mês, unidade **% ao mês**, não ao ano).
+  - Formato devolvido pela API (conferido no navegador): `[{"data": "01/10/2026", "valor": "9498"}]`
+    — data em texto `dd/mm/aaaa` e valor em **texto**. A bronze guarda assim; a silver converte.
+  - Não usar nenhum outro código sem o autor aprovar.
 - **Fora do escopo:** câmbio, PVB, Comex Stat, RENAVAM, DRE. Ficam para os próximos projetos (Pleno/Sênior).
 
 ## Perguntas de negócio (cada uma vira um indicador na gold)
