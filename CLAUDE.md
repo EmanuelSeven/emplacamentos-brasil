@@ -95,6 +95,20 @@ tests/                 testes com dados inventados
 - **Teste final antes da entrega:** apagar `data/emplacamentos.db`, seguir só os comandos do README
   e conferir se os indicadores voltam iguais.
 
+## Decisões sobre o dado (aprovadas pelo autor)
+
+- **Bronze (Etapa 2):** recarga completa a cada execução (DROP + INSERT). Conferido em 22/11/2026:
+  as 4 categorias (7384+7385+7386+7387) somam exatamente o total (7389) nos 441 meses.
+- **Silver (Etapa 3):**
+  - Selic: manter **só meses fechados**. O mês da carga ainda está em andamento e a série é
+    acumulada no mês, então o valor dele está incompleto (ex.: 11/2026 = 0.66 contra 1.07 em 10/2026).
+  - Selic: guardar **as duas unidades**, `selic_mes` (% ao mês, como vem) e `selic_ano`
+    (% ao ano, anualizada por juros compostos: ((1 + mes/100)^12 - 1) * 100).
+  - Histórico **completo** na silver. O recorte de período (a Selic passa de 80% ao mês antes do
+    Plano Real) é decidido na gold, no indicador de juros.
+  - O total (7389) fica na silver como categoria `total`, e nunca deve ser somado junto com as
+    outras quatro categorias.
+
 ## README (obrigatório pelo curso)
 
 Deve conter: fonte (link + licença), o que é uma linha de cada tabela, as três camadas e os indicadores,
